@@ -2,6 +2,8 @@ package ru.ogyrecheksan.chatmicroservice.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
+
 import java.time.LocalDateTime;
 
 @Entity
