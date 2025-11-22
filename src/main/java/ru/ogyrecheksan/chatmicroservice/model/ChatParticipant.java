@@ -5,6 +5,7 @@ import lombok.Data;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "chat_participants")
@@ -15,15 +16,15 @@ public class ChatParticipant {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chat_id", nullable = false)
+    @JoinColumn(name = "chat_id")
     private Chat chat;
 
-    @Column(name = "user_id", nullable = false)
-    private Long userId;
+    @Column(name = "user_id", columnDefinition = "UUID")
+    private UUID userId;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private ChatRole role = ChatRole.MEMBER;
+    private ChatRole role;
 
     @Column(name = "joined_at", nullable = false)
     private LocalDateTime joinedAt = LocalDateTime.now();

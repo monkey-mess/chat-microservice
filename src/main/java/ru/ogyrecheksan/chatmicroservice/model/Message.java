@@ -5,6 +5,7 @@ import lombok.Data;
 import ru.ogyrecheksan.chatmicroservice.model.enums.MessageType;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "messages")
@@ -14,22 +15,22 @@ public class Message {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 2000)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
-    private MessageType type = MessageType.TEXT;
+    private MessageType type;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "chat_id", nullable = false)
+    @JoinColumn(name = "chat_id")
     private Chat chat;
 
-    @Column(name = "sender_id", nullable = false)
-    private Long senderId;
+    @Column(name = "sender_id", columnDefinition = "UUID")
+    private UUID senderId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reply_to_id")
+    @JoinColumn(name = "reply_to_message_id")
     private Message replyTo;
 
     @Column(name = "sent_at", nullable = false)

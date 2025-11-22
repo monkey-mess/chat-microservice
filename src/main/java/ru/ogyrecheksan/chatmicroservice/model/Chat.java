@@ -7,6 +7,7 @@ import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Entity
 @Table(name = "chats")
@@ -23,8 +24,8 @@ public class Chat {
     @Column(nullable = false)
     private ChatType type;
 
-    @Column(name = "created_by")
-    private Long createdBy;
+    @Column(name = "created_by", columnDefinition = "UUID")
+    private UUID createdBy;
 
     @OneToMany(mappedBy = "chat", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<ChatParticipant> participants = new ArrayList<>();

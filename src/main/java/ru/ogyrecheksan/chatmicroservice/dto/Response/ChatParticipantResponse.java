@@ -4,6 +4,7 @@ import lombok.Data;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Data
 public class ChatParticipantResponse {

@@ -6,6 +6,7 @@ import lombok.Data;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
 
 import java.util.List;
+import java.util.UUID;
 
 @Data
 public class CreateChatRequest {
@@ -15,5 +16,5 @@ public class CreateChatRequest {
     @NotNull
     private ChatType type;
 
-    private List<Long> participantIds;
+    private List<UUID> participantIds;
 }

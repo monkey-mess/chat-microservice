@@ -9,8 +9,8 @@ import ru.ogyrecheksan.chatmicroservice.dto.Request.SendMessageRequest;
 import ru.ogyrecheksan.chatmicroservice.service.MessageService;
 import ru.ogyrecheksan.chatmicroservice.service.WebSocketService;
 
-
 import java.security.Principal;
+import java.util.UUID;
 
 @Controller
 @RequiredArgsConstructor
@@ -25,12 +25,12 @@ public class WebSocketController {
             @Payload SendMessageRequest request,
             Principal principal) {
 
-        // Здесь нужно получить ID пользователя из principal
-        Long userId = 1L; // Временная реализация
+        // Получаем UUID пользователя из principal
+        UUID userId = extractUserIdFromPrincipal(principal);
 
         // Используем существующий метод сервиса
         request.setChatId(chatId);
-        messageService.sendMessage(request, userId, null);
+        messageService.sendMessage(request, userId, null); // authToken = null для WebSocket
     }
 
     @MessageMapping("/chat/{chatId}/typing")
@@ -39,7 +39,17 @@ public class WebSocketController {
             @Payload Boolean typing,
             Principal principal) {
 
-        Long userId = 1L; // Временная реализация
+        UUID userId = extractUserIdFromPrincipal(principal);
         webSocketService.sendTypingIndicator(chatId, userId, typing);
+    }
+
+    private UUID extractUserIdFromPrincipal(Principal principal) {
+        // Временная реализация - в продакшене нужно получать UUID из principal
+        // Используем тот же метод, что и в ChatController для консистентности
+        if (principal != null && principal.getName() != null) {
+            return UUID.nameUUIDFromBytes(principal.getName().getBytes());
+        }
+        // Fallback для тестирования
+        return UUID.fromString("00000000-0000-0000-0000-000000000001");
     }
 }

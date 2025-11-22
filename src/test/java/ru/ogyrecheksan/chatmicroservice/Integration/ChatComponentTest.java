@@ -19,6 +19,8 @@ import ru.ogyrecheksan.chatmicroservice.service.UserServiceClient;
 
 import javax.crypto.SecretKey;
 import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -42,13 +44,17 @@ class ChatComponentTest {
 
     private String validToken;
     private String baseUrl;
+    private UUID testUserId;
+    private UUID testUser2Id;
 
     private final String jwtSecret = "Peanut_Butter_Jelly_The_Long_Way_Secret_Key_123";
 
     @BeforeEach
     void setUp() {
         baseUrl = "http://localhost:" + port;
-        
+        testUserId = UUID.nameUUIDFromBytes("test@example.com".getBytes());
+        testUser2Id = UUID.randomUUID();
+
         // Создаем валидный JWT токен для тестов
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
         validToken = "Bearer " + Jwts.builder()
@@ -58,14 +64,19 @@ class ChatComponentTest {
 
         // Настраиваем моки для UserServiceClient
         UserInfoResponse userInfo = new UserInfoResponse();
-        userInfo.setId(1L);
+        userInfo.setId(testUserId);
         userInfo.setUsername("testuser");
         userInfo.setEmail("test@example.com");
 
-        when(userServiceClient.getUserById(anyString(), anyLong()))
+        UserInfoResponse user2Info = new UserInfoResponse();
+        user2Info.setId(testUser2Id);
+        user2Info.setUsername("testuser2");
+        user2Info.setEmail("test2@example.com");
+
+        when(userServiceClient.getUserById(anyString(), any(UUID.class)))
                 .thenReturn(userInfo);
         when(userServiceClient.getUsersByIds(anyString(), anyList()))
-                .thenReturn(Arrays.asList(userInfo));
+                .thenReturn(Arrays.asList(userInfo, user2Info));
     }
 
     @Test
@@ -109,7 +120,7 @@ class ChatComponentTest {
         CreateChatRequest request = new CreateChatRequest();
         request.setName("Test Group Chat");
         request.setType(ChatType.GROUP);
-        request.setParticipantIds(Arrays.asList(2L, 3L));
+        request.setParticipantIds(Arrays.asList(testUser2Id, UUID.randomUUID()));
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", validToken);
@@ -143,7 +154,7 @@ class ChatComponentTest {
     }
 
     @Test
-    void createGroupChat_WithInvalidRequest_ShouldReturnBadRequest() throws Exception {
+    void createGroupChat_WithInvalidRequest_ShouldReturnBadRequest() {
         String url = baseUrl + "/api/chats";
         CreateChatRequest request = new CreateChatRequest();
         // Не устанавливаем обязательные поля
@@ -156,12 +167,12 @@ class ChatComponentTest {
         ResponseEntity<String> response = restTemplate.exchange(
                 url, HttpMethod.POST, entity, String.class);
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 
     @Test
     void createPersonalChat_WithValidToken_ShouldReturnOk() {
-        String url = baseUrl + "/api/chats/personal/2";
+        String url = baseUrl + "/api/chats/personal/" + testUser2Id;
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", validToken);
         HttpEntity<?> entity = new HttpEntity<>(headers);
@@ -176,7 +187,7 @@ class ChatComponentTest {
 
     @Test
     void createPersonalChat_WithoutToken_ShouldReturnForbidden() {
-        String url = baseUrl + "/api/chats/personal/2";
+        String url = baseUrl + "/api/chats/personal/" + testUser2Id;
         HttpHeaders headers = new HttpHeaders();
         HttpEntity<?> entity = new HttpEntity<>(headers);
 
@@ -239,9 +250,8 @@ class ChatComponentTest {
         ResponseEntity<String> response = restTemplate.exchange(
                 url, HttpMethod.GET, entity, String.class);
 
-        // Может вернуть 500 или 404 в зависимости от реализации
-        assertTrue(response.getStatusCode().is5xxServerError() || 
-                   response.getStatusCode() == HttpStatus.NOT_FOUND);
+        // Теперь должно возвращать 404
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test

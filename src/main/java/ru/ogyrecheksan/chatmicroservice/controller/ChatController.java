@@ -4,7 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.CreateChatRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatResponse;
@@ -12,8 +12,8 @@ import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
 import ru.ogyrecheksan.chatmicroservice.service.ChatService;
 import ru.ogyrecheksan.chatmicroservice.service.MessageService;
 
-
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/chats")
@@ -25,10 +25,10 @@ public class ChatController {
 
     @GetMapping
     public ResponseEntity<List<ChatResponse>> getUserChats(
-            @AuthenticationPrincipal String userEmail,
+            Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
-        Long userId = extractUserIdFromEmail(userEmail); // Нужно реализовать
+        UUID userId = extractUserIdFromAuthentication(authentication);
         List<ChatResponse> chats = chatService.getUserChats(userId, authToken);
         return ResponseEntity.ok(chats);
     }
@@ -36,21 +36,21 @@ public class ChatController {
     @PostMapping
     public ResponseEntity<ChatResponse> createChat(
             @Valid @RequestBody CreateChatRequest request,
-            @AuthenticationPrincipal String userEmail,
+            Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
-        Long userId = extractUserIdFromEmail(userEmail);
+        UUID userId = extractUserIdFromAuthentication(authentication);
         ChatResponse chat = chatService.createGroupChat(request, userId, authToken);
         return ResponseEntity.ok(chat);
     }
 
     @PostMapping("/personal/{userId}")
     public ResponseEntity<ChatResponse> createPersonalChat(
-            @PathVariable Long userId,
-            @AuthenticationPrincipal String userEmail,
+            @PathVariable UUID userId,
+            Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
-        Long currentUserId = extractUserIdFromEmail(userEmail);
+        UUID currentUserId = extractUserIdFromAuthentication(authentication);
         ChatResponse chat = chatService.createPersonalChat(currentUserId, userId, authToken);
         return ResponseEntity.ok(chat);
     }
@@ -58,12 +58,21 @@ public class ChatController {
     @GetMapping("/{chatId}")
     public ResponseEntity<ChatResponse> getChat(
             @PathVariable Long chatId,
-            @AuthenticationPrincipal String userEmail,
+            Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
-        Long userId = extractUserIdFromEmail(userEmail);
-        ChatResponse chat = chatService.getChat(chatId, userId, authToken);
-        return ResponseEntity.ok(chat);
+        UUID userId = extractUserIdFromAuthentication(authentication);
+        try {
+            ChatResponse chat = chatService.getChat(chatId, userId, authToken);
+            return ResponseEntity.ok(chat);
+        } catch (RuntimeException e) {
+            if (e.getMessage().contains("Chat not found")) {
+                return ResponseEntity.notFound().build();
+            } else if (e.getMessage().contains("Access denied")) {
+                return ResponseEntity.status(403).build();
+            }
+            return ResponseEntity.status(500).build();
+        }
     }
 
     @GetMapping("/{chatId}/messages")
@@ -71,18 +80,19 @@ public class ChatController {
             @PathVariable Long chatId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "50") int size,
-            @AuthenticationPrincipal String userEmail,
+            Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
-        Long userId = extractUserIdFromEmail(userEmail);
+        UUID userId = extractUserIdFromAuthentication(authentication);
         Page<MessageResponse> messages = messageService.getChatMessages(chatId, userId, page, size, authToken);
         return ResponseEntity.ok(messages);
     }
 
-    // Временная реализация - в продакшене нужно получать ID из auth-сервиса
-    private Long extractUserIdFromEmail(String email) {
-        // Здесь должна быть логика получения ID пользователя по email
-        // Пока возвращаем хардкод для тестирования
-        return 1L;
+    private UUID extractUserIdFromAuthentication(Authentication authentication) {
+        if (authentication == null || authentication.getName() == null) {
+            throw new IllegalArgumentException("Authentication cannot be null");
+        }
+        String username = authentication.getName();
+        return UUID.nameUUIDFromBytes(username.getBytes());
     }
 }

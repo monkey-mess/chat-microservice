@@ -16,6 +16,7 @@ import ru.ogyrecheksan.chatmicroservice.repository.MessageRepository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -27,7 +28,7 @@ public class MessageService {
     private final UserServiceClient userServiceClient;
     private final WebSocketService webSocketService;
 
-    public MessageResponse sendMessage(SendMessageRequest request, Long senderId, String authToken) {
+    public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
         // Проверяем существование чата
         var chat = chatRepository.findById(request.getChatId())
                 .orElseThrow(() -> new RuntimeException("Chat not found"));
@@ -56,7 +57,7 @@ public class MessageService {
         return response;
     }
 
-    public Page<MessageResponse> getChatMessages(Long chatId, Long userId, int page, int size, String authToken) {
+    public Page<MessageResponse> getChatMessages(Long chatId, UUID userId, int page, int size, String authToken) {
         // Проверяем доступ
         if (!chatRepository.existsById(chatId)) {
             throw new RuntimeException("Chat not found");
@@ -82,7 +83,7 @@ public class MessageService {
         return convertToResponse(messages.get(0), null);
     }
 
-    public void markMessagesAsRead(Long chatId, Long userId) {
+    public void markMessagesAsRead(Long chatId, UUID userId) {
         List<Message> unreadMessages = messageRepository
                 .findByChatIdAndReadAtIsNullAndSenderIdNot(chatId, userId);
 
@@ -93,15 +94,13 @@ public class MessageService {
         messageRepository.saveAll(unreadMessages);
     }
 
-    private void markMessagesAsDelivered(Long chatId, Long userId) {
+    private void markMessagesAsDelivered(Long chatId, UUID userId) {
         List<Message> undeliveredMessages = messageRepository
-                .findByChatIdAndReadAtIsNullAndSenderIdNot(chatId, userId);
+                .findByChatIdAndDeliveredAtIsNullAndSenderIdNot(chatId, userId);
 
         LocalDateTime now = LocalDateTime.now();
         for (Message message : undeliveredMessages) {
-            if (message.getDeliveredAt() == null) {
-                message.setDeliveredAt(now);
-            }
+            message.setDeliveredAt(now);
         }
 
         messageRepository.saveAll(undeliveredMessages);

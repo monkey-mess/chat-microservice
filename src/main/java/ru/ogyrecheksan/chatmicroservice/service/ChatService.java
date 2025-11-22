@@ -7,6 +7,8 @@ import ru.ogyrecheksan.chatmicroservice.dto.Request.CreateChatRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatParticipantResponse;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatResponse;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.UserInfoResponse;
+import ru.ogyrecheksan.chatmicroservice.exception.AccessDeniedException;
+import ru.ogyrecheksan.chatmicroservice.exception.ChatNotFoundException;
 import ru.ogyrecheksan.chatmicroservice.model.Chat;
 import ru.ogyrecheksan.chatmicroservice.model.ChatParticipant;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
@@ -16,6 +18,7 @@ import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -27,7 +30,7 @@ public class ChatService {
     private final UserServiceClient userServiceClient;
     private final MessageService messageService;
 
-    public ChatResponse createPersonalChat(Long user1Id, Long user2Id, String authToken) {
+    public ChatResponse createPersonalChat(UUID user1Id, UUID user2Id, String authToken) {
         // Проверяем, не существует ли уже личный чат
         var existingChat = chatRepository.findPersonalChat(user1Id, user2Id);
         if (existingChat.isPresent()) {
@@ -49,7 +52,7 @@ public class ChatService {
         return convertToResponse(savedChat, user1Id, authToken);
     }
 
-    public ChatResponse createGroupChat(CreateChatRequest request, Long creatorId, String authToken) {
+    public ChatResponse createGroupChat(CreateChatRequest request, UUID creatorId, String authToken) {
         Chat chat = new Chat();
         chat.setName(request.getName());
         chat.setType(request.getType());
@@ -62,7 +65,7 @@ public class ChatService {
 
         // Добавляем других участников
         if (request.getParticipantIds() != null) {
-            for (Long participantId : request.getParticipantIds()) {
+            for (UUID participantId : request.getParticipantIds()) {
                 if (!participantId.equals(creatorId)) {
                     addParticipant(savedChat, participantId, ChatRole.MEMBER);
                 }
@@ -72,26 +75,26 @@ public class ChatService {
         return convertToResponse(savedChat, creatorId, authToken);
     }
 
-    public List<ChatResponse> getUserChats(Long userId, String authToken) {
+    public List<ChatResponse> getUserChats(UUID userId, String authToken) {
         List<Chat> chats = chatRepository.findUserChats(userId);
         return chats.stream()
                 .map(chat -> convertToResponse(chat, userId, authToken))
                 .toList();
     }
 
-    public ChatResponse getChat(Long chatId, Long userId, String authToken) {
+    public ChatResponse getChat(Long chatId, UUID userId, String authToken) {
         Chat chat = chatRepository.findById(chatId)
-                .orElseThrow(() -> new RuntimeException("Chat not found"));
+                .orElseThrow(() -> new ChatNotFoundException(chatId));
 
         // Проверяем, является ли пользователь участником
         if (!participantRepository.existsByChatIdAndUserIdAndLeftAtIsNull(chatId, userId)) {
-            throw new RuntimeException("Access denied");
+            throw new AccessDeniedException("Access denied to chat: " + chatId);
         }
 
         return convertToResponse(chat, userId, authToken);
     }
 
-    private void addParticipant(Chat chat, Long userId, ChatRole role) {
+    private void addParticipant(Chat chat, UUID userId, ChatRole role) {
         ChatParticipant participant = new ChatParticipant();
         participant.setChat(chat);
         participant.setUserId(userId);
@@ -99,7 +102,7 @@ public class ChatService {
         participantRepository.save(participant);
     }
 
-    private ChatResponse convertToResponse(Chat chat, Long currentUserId, String authToken) {
+    private ChatResponse convertToResponse(Chat chat, UUID currentUserId, String authToken) {
         ChatResponse response = new ChatResponse();
         response.setId(chat.getId());
         response.setName(chat.getName());
@@ -112,17 +115,16 @@ public class ChatService {
             UserInfoResponse creator = userServiceClient.getUserById(authToken, chat.getCreatedBy());
             response.setCreatedBy(creator);
         } catch (Exception e) {
-            // Логируем ошибку, но не прерываем выполнение
             System.err.println("Failed to fetch creator info: " + e.getMessage());
         }
 
         // Получаем участников
-        List<Long> participantIds = participantRepository.findActiveParticipantIds(chat.getId());
+        List<UUID> participantIds = participantRepository.findActiveParticipantIds(chat.getId());
         try {
             List<UserInfoResponse> users = userServiceClient.getUsersByIds(authToken, participantIds);
             List<ChatParticipantResponse> participants = new ArrayList<>();
 
-            for (Long participantId : participantIds) {
+            for (UUID participantId : participantIds) {
                 UserInfoResponse user = users.stream()
                         .filter(u -> u.getId().equals(participantId))
                         .findFirst()
@@ -135,7 +137,7 @@ public class ChatService {
                     // Получаем роль участника
                     participantRepository.findByChatIdAndUserId(chat.getId(), participantId)
                             .ifPresent(participant -> {
-                                participantResponse.setId(participant.getId());
+                                participantResponse.setId(participant.getId()); // Теперь это Long
                                 participantResponse.setRole(participant.getRole());
                                 participantResponse.setJoinedAt(participant.getJoinedAt());
                             });
