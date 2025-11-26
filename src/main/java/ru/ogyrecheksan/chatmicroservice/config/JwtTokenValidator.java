@@ -18,7 +18,11 @@ import java.util.List;
 
 public class JwtTokenValidator extends OncePerRequestFilter {
 
-    private final String jwtSecret = "Peanut_Butter_Jelly_The_Long_Way_Secret_Key_123";
+    private final SecretKey key;
+
+    public JwtTokenValidator(String jwtSecret) {
+        this.key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
@@ -29,8 +33,6 @@ public class JwtTokenValidator extends OncePerRequestFilter {
         if (jwt != null && jwt.startsWith("Bearer ")) {
             try {
                 jwt = jwt.substring(7);
-
-                SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
                 Claims claims = Jwts.parser()
                         .verifyWith(key)
                         .build()

@@ -1,5 +1,6 @@
 package ru.ogyrecheksan.chatmicroservice.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -13,7 +14,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    public JwtTokenValidator jwtTokenValidator(@Value("${auth.jwt.secret}") String jwtSecret) {
+        return new JwtTokenValidator(jwtSecret);
+    }
+
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtTokenValidator jwtTokenValidator) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session
@@ -25,7 +31,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/messages/**").authenticated()
                         .anyRequest().authenticated()
                 )
-                .addFilterBefore(new JwtTokenValidator(), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtTokenValidator, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
