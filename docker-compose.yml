@@ -18,34 +18,17 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  auth-service:
-    image: monkey-auth:latest
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/MONKEY
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      SECRET_KEY: ${SECRET_KEY:-Peanut_Butter_Jelly_The_Long_Way}
-    ports:
-      - "5252:5252"
-
   chat-service:
     build: .
     depends_on:
-      - auth-service
       - postgres
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/MonkeyChat
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      AUTH_SERVICE_URL: http://auth-service:5252
       SECRET_KEY: ${SECRET_KEY:-Peanut_Butter_Jelly_The_Long_Way_Secret_Key_123}
     ports:
       - "5253:5253"
 
 volumes:
   postgres-data:
-
-

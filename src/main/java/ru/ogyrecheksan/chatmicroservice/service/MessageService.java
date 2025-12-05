@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.SendMessageRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
-import ru.ogyrecheksan.chatmicroservice.dto.Response.UserInfoResponse;
 import ru.ogyrecheksan.chatmicroservice.model.Message;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.MessageRepository;
@@ -25,7 +24,6 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final ChatRepository chatRepository;
-    private final UserServiceClient userServiceClient;
     private final WebSocketService webSocketService;
 
     public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
@@ -57,13 +55,14 @@ public class MessageService {
         return response;
     }
 
-    public Page<MessageResponse> getChatMessages(Long chatId, UUID userId, int page, int size, String authToken) {
+    public Page<MessageResponse> getChatMessages(Long chatId, UUID userId, int offset, int limit, String authToken) {
         // Проверяем доступ
         if (!chatRepository.existsById(chatId)) {
             throw new RuntimeException("Chat not found");
         }
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by("sentAt").descending());
+        int pageIndex = offset / Math.max(limit, 1);
+        Pageable pageable = PageRequest.of(pageIndex, limit, Sort.by("sentAt").descending());
         Page<Message> messages = messageRepository.findByChatIdOrderBySentAtDesc(chatId, pageable);
 
         // Помечаем сообщения как доставленные
@@ -108,27 +107,11 @@ public class MessageService {
 
     private MessageResponse convertToResponse(Message message, String authToken) {
         MessageResponse response = new MessageResponse();
-        response.setId(message.getId());
+        response.setId(String.valueOf(message.getId()));
+        response.setConversationId(String.valueOf(message.getChat().getId()));
+        response.setSenderId(message.getSenderId() != null ? message.getSenderId().toString() : null);
         response.setContent(message.getContent());
-        response.setType(message.getType());
-        response.setSentAt(message.getSentAt());
-        response.setDeliveredAt(message.getDeliveredAt());
-        response.setReadAt(message.getReadAt());
-
-        // Получаем информацию об отправителе
-        if (authToken != null) {
-            try {
-                UserInfoResponse sender = userServiceClient.getUserById(authToken, message.getSenderId());
-                response.setSender(sender);
-            } catch (Exception e) {
-                System.err.println("Failed to fetch sender info: " + e.getMessage());
-            }
-        }
-
-        // Обрабатываем ответ на сообщение
-        if (message.getReplyTo() != null) {
-            response.setReplyTo(convertToResponse(message.getReplyTo(), null));
-        }
+        response.setCreatedAt(message.getSentAt());
 
         return response;
     }

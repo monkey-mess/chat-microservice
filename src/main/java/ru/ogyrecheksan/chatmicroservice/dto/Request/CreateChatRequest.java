@@ -1,6 +1,5 @@
 package ru.ogyrecheksan.chatmicroservice.dto.Request;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
@@ -10,8 +9,8 @@ import java.util.UUID;
 
 @Data
 public class CreateChatRequest {
-    @NotBlank
     private String name;
+    private String description;
 
     @NotNull
     private ChatType type;

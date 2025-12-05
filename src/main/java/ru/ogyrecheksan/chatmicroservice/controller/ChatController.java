@@ -6,14 +6,19 @@ import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.CreateChatRequest;
+import ru.ogyrecheksan.chatmicroservice.dto.Request.ParticipantActionRequest;
+import ru.ogyrecheksan.chatmicroservice.dto.Request.SendMessageRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatResponse;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
 import ru.ogyrecheksan.chatmicroservice.service.ChatService;
 import ru.ogyrecheksan.chatmicroservice.service.MessageService;
+import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/chats")
@@ -40,8 +45,13 @@ public class ChatController {
             @RequestHeader("Authorization") String authToken) {
 
         UUID userId = extractUserIdFromAuthentication(authentication);
-        ChatResponse chat = chatService.createGroupChat(request, userId, authToken);
-        return ResponseEntity.ok(chat);
+        ChatResponse chat;
+        if (request.getType() == ChatType.PERSONAL && request.getParticipantIds() != null && !request.getParticipantIds().isEmpty()) {
+            chat = chatService.createPersonalChat(userId, request.getParticipantIds().get(0), authToken);
+        } else {
+            chat = chatService.createGroupChat(request, userId, authToken);
+        }
+        return ResponseEntity.status(201).body(chat);
     }
 
     @PostMapping("/personal/{userId}")
@@ -76,23 +86,54 @@ public class ChatController {
     }
 
     @GetMapping("/{chatId}/messages")
-    public ResponseEntity<Page<MessageResponse>> getChatMessages(
+    public ResponseEntity<List<MessageResponse>> getChatMessages(
             @PathVariable Long chatId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(defaultValue = "50") int limit,
+            @RequestParam(defaultValue = "0") int offset,
             Authentication authentication,
             @RequestHeader("Authorization") String authToken) {
 
         UUID userId = extractUserIdFromAuthentication(authentication);
-        Page<MessageResponse> messages = messageService.getChatMessages(chatId, userId, page, size, authToken);
-        return ResponseEntity.ok(messages);
+        Page<MessageResponse> messages = messageService.getChatMessages(chatId, userId, offset, limit, authToken);
+        return ResponseEntity.ok(messages.getContent());
+    }
+
+    @PostMapping("/{chatId}/messages")
+    public ResponseEntity<MessageResponse> sendMessage(
+            @PathVariable Long chatId,
+            @Valid @RequestBody SendMessageRequest request,
+            Authentication authentication,
+            @RequestHeader("Authorization") String authToken) {
+        UUID userId = extractUserIdFromAuthentication(authentication);
+        request.setChatId(chatId);
+        MessageResponse response = messageService.sendMessage(request, userId, authToken);
+        return ResponseEntity.status(201).body(response);
+    }
+
+    @PutMapping("/{chatId}/participants")
+    public ResponseEntity<Void> updateParticipants(
+            @PathVariable Long chatId,
+            @Valid @RequestBody ParticipantActionRequest request,
+            Authentication authentication) {
+        UUID userId = extractUserIdFromAuthentication(authentication);
+        chatService.updateParticipants(chatId, userId, request);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{chatId}/avatar")
+    public ResponseEntity<Map<String, String>> uploadAvatar(
+            @PathVariable Long chatId,
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication) {
+        UUID userId = extractUserIdFromAuthentication(authentication);
+        String url = chatService.uploadAvatar(chatId, userId, file);
+        return ResponseEntity.ok(Map.of("avatarUrl", url));
     }
 
     private UUID extractUserIdFromAuthentication(Authentication authentication) {
         if (authentication == null || authentication.getName() == null) {
             throw new IllegalArgumentException("Authentication cannot be null");
         }
-        String username = authentication.getName();
-        return UUID.nameUUIDFromBytes(username.getBytes());
+        return UUID.fromString(authentication.getName());
     }
 }

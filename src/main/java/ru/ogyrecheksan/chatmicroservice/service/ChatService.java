@@ -4,9 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.CreateChatRequest;
-import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatParticipantResponse;
+import ru.ogyrecheksan.chatmicroservice.dto.Request.ParticipantActionRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatResponse;
-import ru.ogyrecheksan.chatmicroservice.dto.Response.UserInfoResponse;
 import ru.ogyrecheksan.chatmicroservice.exception.AccessDeniedException;
 import ru.ogyrecheksan.chatmicroservice.exception.ChatNotFoundException;
 import ru.ogyrecheksan.chatmicroservice.model.Chat;
@@ -15,10 +14,14 @@ import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatParticipantRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 @Service
 @Transactional
@@ -27,7 +30,6 @@ public class ChatService {
 
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository participantRepository;
-    private final UserServiceClient userServiceClient;
     private final MessageService messageService;
 
     public ChatResponse createPersonalChat(UUID user1Id, UUID user2Id, String authToken) {
@@ -54,9 +56,13 @@ public class ChatService {
 
     public ChatResponse createGroupChat(CreateChatRequest request, UUID creatorId, String authToken) {
         Chat chat = new Chat();
+        if (request.getType() == ChatType.GROUP && (request.getName() == null || request.getName().isBlank())) {
+            throw new IllegalArgumentException("Name is required for group chat");
+        }
         chat.setName(request.getName());
         chat.setType(request.getType());
         chat.setCreatedBy(creatorId);
+        chat.setDescription(request.getDescription());
 
         Chat savedChat = chatRepository.save(chat);
 
@@ -94,6 +100,47 @@ public class ChatService {
         return convertToResponse(chat, userId, authToken);
     }
 
+    public void updateParticipants(Long chatId, UUID actorId, ParticipantActionRequest request) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ChatNotFoundException(chatId));
+        // Проверка что actor участник
+        if (!participantRepository.existsByChatIdAndUserIdAndLeftAtIsNull(chatId, actorId)) {
+            throw new AccessDeniedException("Access denied to chat: " + chatId);
+        }
+        if ("add".equalsIgnoreCase(request.getAction())) {
+            addParticipant(chat, request.getUserId(), ChatRole.MEMBER);
+        } else if ("remove".equalsIgnoreCase(request.getAction())) {
+            participantRepository.findByChatIdAndUserId(chatId, request.getUserId())
+                    .ifPresent(p -> {
+                        p.setLeftAt(java.time.LocalDateTime.now());
+                        participantRepository.save(p);
+                    });
+        } else {
+            throw new IllegalArgumentException("Unsupported action");
+        }
+    }
+
+    public String uploadAvatar(Long chatId, UUID actorId, MultipartFile file) {
+        Chat chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ChatNotFoundException(chatId));
+        if (!participantRepository.existsByChatIdAndUserIdAndLeftAtIsNull(chatId, actorId)) {
+            throw new AccessDeniedException("Access denied to chat: " + chatId);
+        }
+        try {
+            Path uploadDir = Path.of("uploads");
+            Files.createDirectories(uploadDir);
+            String filename = "chat-" + chatId + "-" + file.getOriginalFilename();
+            Path target = uploadDir.resolve(filename);
+            Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+            String url = "/uploads/" + filename;
+            chat.setAvatarUrl(url);
+            chatRepository.save(chat);
+            return url;
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to upload avatar", e);
+        }
+    }
+
     private void addParticipant(Chat chat, UUID userId, ChatRole role) {
         ChatParticipant participant = new ChatParticipant();
         participant.setChat(chat);
@@ -106,57 +153,36 @@ public class ChatService {
         ChatResponse response = new ChatResponse();
         response.setId(chat.getId());
         response.setName(chat.getName());
-        response.setType(chat.getType());
+        response.setType(chat.getType() == ChatType.PERSONAL ? "private" : "group");
+        response.setDescription(null);
+        response.setAvatarUrl(null);
         response.setCreatedAt(chat.getCreatedAt());
-        response.setUpdatedAt(chat.getUpdatedAt());
 
-        // Получаем информацию о создателе
-        try {
-            UserInfoResponse creator = userServiceClient.getUserById(authToken, chat.getCreatedBy());
-            response.setCreatedBy(creator);
-        } catch (Exception e) {
-            System.err.println("Failed to fetch creator info: " + e.getMessage());
-        }
-
-        // Получаем участников
+        // Участники
         List<UUID> participantIds = participantRepository.findActiveParticipantIds(chat.getId());
+        List<ChatResponse.Participant> participants = new ArrayList<>();
         try {
-            List<UserInfoResponse> users = userServiceClient.getUsersByIds(authToken, participantIds);
-            List<ChatParticipantResponse> participants = new ArrayList<>();
-
             for (UUID participantId : participantIds) {
-                UserInfoResponse user = users.stream()
-                        .filter(u -> u.getId().equals(participantId))
-                        .findFirst()
-                        .orElse(null);
-
-                if (user != null) {
-                    ChatParticipantResponse participantResponse = new ChatParticipantResponse();
-                    participantResponse.setUser(user);
-
-                    // Получаем роль участника
-                    participantRepository.findByChatIdAndUserId(chat.getId(), participantId)
-                            .ifPresent(participant -> {
-                                participantResponse.setId(participant.getId()); // Теперь это Long
-                                participantResponse.setRole(participant.getRole());
-                                participantResponse.setJoinedAt(participant.getJoinedAt());
-                            });
-
-                    participants.add(participantResponse);
-                }
+                ChatResponse.Participant p = new ChatResponse.Participant();
+                p.setUserId(participantId);
+                participantRepository.findByChatIdAndUserId(chat.getId(), participantId)
+                        .ifPresent(participant -> p.setRole(participant.getRole().name().toLowerCase()));
+                participants.add(p);
             }
-            response.setParticipants(participants);
         } catch (Exception e) {
             System.err.println("Failed to fetch participant info: " + e.getMessage());
         }
+        response.setParticipants(participants);
 
-        // Получаем последнее сообщение
+        // Последнее сообщение
         var lastMessage = messageService.getLastMessage(chat.getId());
-        response.setLastMessage(lastMessage);
-
-        // Считаем непрочитанные сообщения
-        Integer unreadCount = chatRepository.countUnreadMessages(chat.getId(), currentUserId);
-        response.setUnreadCount(unreadCount);
+        if (lastMessage != null) {
+            ChatResponse.LastMessage lm = new ChatResponse.LastMessage();
+            lm.setId(lastMessage.getId());
+            lm.setContent(lastMessage.getContent());
+            lm.setSenderId(lastMessage.getSenderId());
+            response.setLastMessage(lm);
+        }
 
         return response;
     }

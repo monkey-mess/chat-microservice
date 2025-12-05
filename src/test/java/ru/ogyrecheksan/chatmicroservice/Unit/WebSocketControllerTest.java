@@ -9,8 +9,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import ru.ogyrecheksan.chatmicroservice.controller.WebSocketController;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.SendMessageRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
-import ru.ogyrecheksan.chatmicroservice.dto.Response.UserInfoResponse;
-import ru.ogyrecheksan.chatmicroservice.model.enums.MessageType;
 import ru.ogyrecheksan.chatmicroservice.service.MessageService;
 import ru.ogyrecheksan.chatmicroservice.service.WebSocketService;
 
@@ -45,19 +43,14 @@ class WebSocketControllerTest {
 
         sendMessageRequest = new SendMessageRequest();
         sendMessageRequest.setContent("Hello WebSocket");
-        sendMessageRequest.setType(MessageType.TEXT);
-
-        UserInfoResponse userInfo = new UserInfoResponse();
-        userInfo.setId(userId);
-        userInfo.setUsername("testuser");
-        userInfo.setEmail("test@example.com");
+        sendMessageRequest.setType(ru.ogyrecheksan.chatmicroservice.model.enums.MessageType.TEXT);
 
         messageResponse = new MessageResponse();
-        messageResponse.setId(1L);
+        messageResponse.setId("1");
+        messageResponse.setConversationId("1");
+        messageResponse.setSenderId(userId.toString());
         messageResponse.setContent("Hello WebSocket");
-        messageResponse.setType(MessageType.TEXT);
-        messageResponse.setSender(userInfo);
-        messageResponse.setSentAt(LocalDateTime.now());
+        messageResponse.setCreatedAt(LocalDateTime.now());
     }
 
     @Test

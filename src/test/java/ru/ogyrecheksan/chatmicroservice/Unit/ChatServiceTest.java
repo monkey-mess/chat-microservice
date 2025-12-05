@@ -8,7 +8,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.CreateChatRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.ChatResponse;
-import ru.ogyrecheksan.chatmicroservice.dto.Response.UserInfoResponse;
 import ru.ogyrecheksan.chatmicroservice.model.Chat;
 import ru.ogyrecheksan.chatmicroservice.model.ChatParticipant;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
@@ -17,7 +16,6 @@ import ru.ogyrecheksan.chatmicroservice.repository.ChatParticipantRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
 import ru.ogyrecheksan.chatmicroservice.service.ChatService;
 import ru.ogyrecheksan.chatmicroservice.service.MessageService;
-import ru.ogyrecheksan.chatmicroservice.service.UserServiceClient;
 
 import java.util.Arrays;
 import java.util.List;
@@ -36,9 +34,6 @@ class ChatServiceTest {
 
     @Mock
     private ChatParticipantRepository participantRepository;
-
-    @Mock
-    private UserServiceClient userServiceClient;
 
     @Mock
     private MessageService messageService;
@@ -75,12 +70,7 @@ class ChatServiceTest {
             return chat;
         });
         when(participantRepository.findActiveParticipantIds(anyLong())).thenReturn(Arrays.asList(testUserId1, testUserId2));
-        when(userServiceClient.getUserById(anyString(), any(UUID.class))).thenReturn(createUserInfo(testUserId1));
-        when(userServiceClient.getUsersByIds(anyString(), anyList())).thenReturn(
-                Arrays.asList(createUserInfo(testUserId1), createUserInfo(testUserId2))
-        );
         when(participantRepository.findByChatIdAndUserId(anyLong(), any(UUID.class))).thenReturn(Optional.of(createParticipant()));
-        when(chatRepository.countUnreadMessages(anyLong(), any(UUID.class))).thenReturn(0);
 
         // Act
         ChatResponse response = chatService.createPersonalChat(testUserId1, testUserId2, testAuthToken);
@@ -97,12 +87,7 @@ class ChatServiceTest {
         when(chatRepository.findPersonalChat(testUserId1, testUserId2))
                 .thenReturn(Optional.of(testChat));
         when(participantRepository.findActiveParticipantIds(anyLong())).thenReturn(Arrays.asList(testUserId1, testUserId2));
-        when(userServiceClient.getUserById(anyString(), any(UUID.class))).thenReturn(createUserInfo(testUserId1));
-        when(userServiceClient.getUsersByIds(anyString(), anyList())).thenReturn(
-                Arrays.asList(createUserInfo(testUserId1), createUserInfo(testUserId2))
-        );
         when(participantRepository.findByChatIdAndUserId(anyLong(), any(UUID.class))).thenReturn(Optional.of(createParticipant()));
-        when(chatRepository.countUnreadMessages(anyLong(), any(UUID.class))).thenReturn(0);
 
         // Act
         ChatResponse response = chatService.createPersonalChat(testUserId1, testUserId2, testAuthToken);
@@ -126,12 +111,7 @@ class ChatServiceTest {
             return chat;
         });
         when(participantRepository.findActiveParticipantIds(anyLong())).thenReturn(Arrays.asList(testUserId1, testUserId2));
-        when(userServiceClient.getUserById(anyString(), any(UUID.class))).thenReturn(createUserInfo(testUserId1));
-        when(userServiceClient.getUsersByIds(anyString(), anyList())).thenReturn(
-                Arrays.asList(createUserInfo(testUserId1), createUserInfo(testUserId2))
-        );
         when(participantRepository.findByChatIdAndUserId(anyLong(), any(UUID.class))).thenReturn(Optional.of(createParticipant()));
-        when(chatRepository.countUnreadMessages(anyLong(), any(UUID.class))).thenReturn(0);
 
         // Act
         ChatResponse response = chatService.createGroupChat(request, testUserId1, testAuthToken);
@@ -139,7 +119,7 @@ class ChatServiceTest {
         // Assert
         assertNotNull(response);
         assertEquals("Test Group", response.getName());
-        assertEquals(ChatType.GROUP, response.getType());
+        assertEquals("group", response.getType());
         verify(chatRepository, times(1)).save(any(Chat.class));
         verify(participantRepository, times(2)).save(any(ChatParticipant.class)); // creator + 1 participant
     }
@@ -150,10 +130,7 @@ class ChatServiceTest {
         List<Chat> chats = Arrays.asList(testChat);
         when(chatRepository.findUserChats(testUserId1)).thenReturn(chats);
         when(participantRepository.findActiveParticipantIds(anyLong())).thenReturn(Arrays.asList(testUserId1));
-        when(userServiceClient.getUserById(anyString(), any(UUID.class))).thenReturn(createUserInfo(testUserId1));
-        when(userServiceClient.getUsersByIds(anyString(), anyList())).thenReturn(Arrays.asList(createUserInfo(testUserId1)));
         when(participantRepository.findByChatIdAndUserId(anyLong(), any(UUID.class))).thenReturn(Optional.of(createParticipant()));
-        when(chatRepository.countUnreadMessages(anyLong(), any(UUID.class))).thenReturn(0);
 
         // Act
         List<ChatResponse> responses = chatService.getUserChats(testUserId1, testAuthToken);
@@ -170,10 +147,7 @@ class ChatServiceTest {
         when(chatRepository.findById(1L)).thenReturn(Optional.of(testChat));
         when(participantRepository.existsByChatIdAndUserIdAndLeftAtIsNull(1L, testUserId1)).thenReturn(true);
         when(participantRepository.findActiveParticipantIds(anyLong())).thenReturn(Arrays.asList(testUserId1));
-        when(userServiceClient.getUserById(anyString(), any(UUID.class))).thenReturn(createUserInfo(testUserId1));
-        when(userServiceClient.getUsersByIds(anyString(), anyList())).thenReturn(Arrays.asList(createUserInfo(testUserId1)));
         when(participantRepository.findByChatIdAndUserId(anyLong(), any(UUID.class))).thenReturn(Optional.of(createParticipant()));
-        when(chatRepository.countUnreadMessages(anyLong(), any(UUID.class))).thenReturn(0);
 
         // Act
         ChatResponse response = chatService.getChat(1L, testUserId1, testAuthToken);
@@ -205,14 +179,6 @@ class ChatServiceTest {
         assertThrows(RuntimeException.class, () -> {
             chatService.getChat(1L, testUserId1, testAuthToken);
         });
-    }
-
-    private UserInfoResponse createUserInfo(UUID userId) {
-        UserInfoResponse userInfo = new UserInfoResponse();
-        userInfo.setId(userId);
-        userInfo.setUsername("user" + userId);
-        userInfo.setEmail("user" + userId + "@example.com");
-        return userInfo;
     }
 
     private ChatParticipant createParticipant() {

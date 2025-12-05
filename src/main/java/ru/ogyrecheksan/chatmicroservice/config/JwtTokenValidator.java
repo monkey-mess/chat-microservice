@@ -39,10 +39,13 @@ public class JwtTokenValidator extends OncePerRequestFilter {
                         .parseSignedClaims(jwt)
                         .getPayload();
 
+                String userId = claims.get("userId", String.class);
                 String email = claims.get("email", String.class);
 
                 UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(email, null,
+                        new UsernamePasswordAuthenticationToken(
+                                userId != null ? userId : email,
+                                null,
                                 List.of(new SimpleGrantedAuthority("ROLE_USER")));
                 SecurityContextHolder.getContext().setAuthentication(auth);
 

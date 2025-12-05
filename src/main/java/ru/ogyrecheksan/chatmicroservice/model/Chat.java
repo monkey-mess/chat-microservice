@@ -24,6 +24,12 @@ public class Chat {
     @Column(nullable = false)
     private ChatType type;
 
+    @Column(name = "description")
+    private String description;
+
+    @Column(name = "avatar_url")
+    private String avatarUrl;
+
     @Column(name = "created_by", columnDefinition = "UUID")
     private UUID createdBy;
 

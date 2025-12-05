@@ -15,20 +15,8 @@ import ru.ogyrecheksan.chatmicroservice.service.UserServiceClient;
 })
 class ChatServiceIntegrationTest {
 
-    @Autowired
-    private ChatService chatService;
-
-    @MockBean
-    private UserServiceClient userServiceClient;
-
     @Test
     void contextLoads() {
         // Проверяем, что контекст Spring поднимается
-    }
-
-    @Test
-    void createPersonalChat_WithH2Database_ShouldWork() {
-        // Интеграционный тест с реальной H2 базой
-        // ...
     }
 }
