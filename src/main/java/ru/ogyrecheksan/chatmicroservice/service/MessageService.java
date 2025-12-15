@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import ru.ogyrecheksan.chatmicroservice.dto.Request.SendMessageRequest;
 import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
 import ru.ogyrecheksan.chatmicroservice.model.Message;
+import ru.ogyrecheksan.chatmicroservice.repository.ChatParticipantRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.MessageRepository;
 
@@ -24,9 +25,10 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final ChatRepository chatRepository;
+        private final ChatParticipantRepository chatParticipantRepository;
     private final WebSocketService webSocketService;
 
-    public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
+        public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
         // Проверяем существование чата
         var chat = chatRepository.findById(request.getChatId())
                 .orElseThrow(() -> new RuntimeException("Chat not found"));
@@ -48,9 +50,15 @@ public class MessageService {
 
         Message savedMessage = messageRepository.save(message);
 
-        // Отправляем через WebSocket
+        // Формируем DTO
         MessageResponse response = convertToResponse(savedMessage, authToken);
+
+        // Отправляем через WebSocket в общий топик чата
         webSocketService.sendMessageToChat(chat.getId(), response);
+
+        // Отправляем персональные уведомления всем участникам чата, кроме отправителя
+        var participantIds = chatParticipantRepository.findActiveParticipantIds(chat.getId());
+        webSocketService.sendNewMessageNotifications(chat.getId(), senderId, response, participantIds);
 
         return response;
     }

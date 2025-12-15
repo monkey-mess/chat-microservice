@@ -14,10 +14,13 @@ import ru.ogyrecheksan.chatmicroservice.model.enums.ChatRole;
 import ru.ogyrecheksan.chatmicroservice.model.enums.ChatType;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatParticipantRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
+import ru.ogyrecheksan.chatmicroservice.service.WebSocketService;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,8 +34,9 @@ public class ChatService {
     private final ChatRepository chatRepository;
     private final ChatParticipantRepository participantRepository;
     private final MessageService messageService;
+        private final WebSocketService webSocketService;
 
-    public ChatResponse createPersonalChat(UUID user1Id, UUID user2Id, String authToken) {
+        public ChatResponse createPersonalChat(UUID user1Id, UUID user2Id, String authToken) {
         // Проверяем, не существует ли уже личный чат
         var existingChat = chatRepository.findPersonalChat(user1Id, user2Id);
         if (existingChat.isPresent()) {
@@ -50,6 +54,13 @@ public class ChatService {
         // Добавляем участников
         addParticipant(savedChat, user1Id, ChatRole.OWNER);
         addParticipant(savedChat, user2Id, ChatRole.MEMBER);
+
+        // Уведомляем участников о новом личном чате
+        webSocketService.sendNewChatNotifications(
+                savedChat,
+                user1Id,
+                Set.of(user1Id, user2Id)
+        );
 
         return convertToResponse(savedChat, user1Id, authToken);
     }
@@ -70,13 +81,19 @@ public class ChatService {
         addParticipant(savedChat, creatorId, ChatRole.OWNER);
 
         // Добавляем других участников
+        Set<UUID> participantIds = new java.util.HashSet<>();
+        participantIds.add(creatorId);
         if (request.getParticipantIds() != null) {
             for (UUID participantId : request.getParticipantIds()) {
                 if (!participantId.equals(creatorId)) {
                     addParticipant(savedChat, participantId, ChatRole.MEMBER);
                 }
+                participantIds.add(participantId);
             }
         }
+
+        // Уведомляем всех участников о новом групповом чате
+        webSocketService.sendNewChatNotifications(savedChat, creatorId, participantIds);
 
         return convertToResponse(savedChat, creatorId, authToken);
     }
@@ -155,7 +172,7 @@ public class ChatService {
         response.setName(chat.getName());
         response.setType(chat.getType() == ChatType.PERSONAL ? "private" : "group");
         response.setDescription(null);
-        response.setAvatarUrl(null);
+        response.setAvatarUrl(chat.getAvatarUrl());
         response.setCreatedAt(chat.getCreatedAt());
 
         // Участники
