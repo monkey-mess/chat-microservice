@@ -65,6 +65,28 @@ public class ChatController {
         return ResponseEntity.ok(chat);
     }
 
+    /**
+     * Получить ID личного чата с пользователем.
+     *
+     * GET /api/chats/personal/{userId}/id
+     * Response:
+     *  200 OK  -> { "chatId": 123 }
+     *  404 NOT FOUND -> если личный чат еще не создан
+     */
+    @GetMapping("/personal/{userId}/id")
+    public ResponseEntity<Map<String, Long>> getPrivateChatId(
+            @PathVariable UUID userId,
+            Authentication authentication) {
+
+        UUID currentUserId = extractUserIdFromAuthentication(authentication);
+        try {
+            Long chatId = chatService.getPrivateChatId(currentUserId, userId);
+            return ResponseEntity.ok(Map.of("chatId", chatId));
+        } catch (ru.ogyrecheksan.chatmicroservice.exception.ChatNotFoundException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/{chatId}")
     public ResponseEntity<ChatResponse> getChat(
             @PathVariable Long chatId,

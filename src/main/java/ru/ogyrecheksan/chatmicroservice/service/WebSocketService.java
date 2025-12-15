@@ -74,7 +74,7 @@ public class WebSocketService {
     /**
      * Уведомления о новом сообщении всем участникам чата (кроме отправителя).
      *
-     * type: NEW_MESSAGE
+     * type: NEW_MESSAGE + MESSAGE_DELIVERED
      * payload: NotificationResponse
      */
     public void sendNewMessageNotifications(Long chatId,
@@ -97,6 +97,19 @@ public class WebSocketService {
             notification.setTimestamp(timestamp != null ? timestamp : LocalDateTime.now());
 
             sendNotificationToUser(participantId, notification);
+
+            // событие о доставке для конкретного пользователя в топик чата
+            WebSocketMessage delivered = new WebSocketMessage();
+            delivered.setType("MESSAGE_DELIVERED");
+            delivered.setChatId(chatId);
+            delivered.setTimestamp(System.currentTimeMillis());
+
+            DeliveryPayload deliveryPayload = new DeliveryPayload();
+            deliveryPayload.setMessageId(Long.parseLong(message.getId()));
+            deliveryPayload.setUserId(participantId);
+            delivered.setPayload(deliveryPayload);
+
+            messagingTemplate.convertAndSend("/topic/chat/" + chatId, delivered);
         }
     }
 
@@ -264,6 +277,27 @@ public class WebSocketService {
 
         public void setMessages(List<MessageResponse> messages) {
             this.messages = messages;
+        }
+    }
+
+    public static class DeliveryPayload {
+        private Long messageId;
+        private UUID userId;
+
+        public Long getMessageId() {
+            return messageId;
+        }
+
+        public void setMessageId(Long messageId) {
+            this.messageId = messageId;
+        }
+
+        public UUID getUserId() {
+            return userId;
+        }
+
+        public void setUserId(UUID userId) {
+            this.userId = userId;
         }
     }
 }

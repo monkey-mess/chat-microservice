@@ -117,6 +117,16 @@ public class ChatService {
         return convertToResponse(chat, userId, authToken);
     }
 
+    /**
+     * Возвращает ID личного чата между текущим пользователем и собеседником.
+     * Если чат не найден – кидает ChatNotFoundException.
+     */
+    public Long getPrivateChatId(UUID currentUserId, UUID otherUserId) {
+        return chatRepository.findPersonalChat(currentUserId, otherUserId)
+                .map(Chat::getId)
+                .orElseThrow(() -> new ChatNotFoundException("Personal chat not found"));
+    }
+
     public void updateParticipants(Long chatId, UUID actorId, ParticipantActionRequest request) {
         Chat chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new ChatNotFoundException(chatId));

@@ -12,6 +12,7 @@ import ru.ogyrecheksan.chatmicroservice.dto.Response.MessageResponse;
 import ru.ogyrecheksan.chatmicroservice.model.Message;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatParticipantRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.ChatRepository;
+import ru.ogyrecheksan.chatmicroservice.repository.MessageReadStatusRepository;
 import ru.ogyrecheksan.chatmicroservice.repository.MessageRepository;
 
 import java.time.LocalDateTime;
@@ -25,10 +26,11 @@ public class MessageService {
 
     private final MessageRepository messageRepository;
     private final ChatRepository chatRepository;
-        private final ChatParticipantRepository chatParticipantRepository;
+    private final ChatParticipantRepository chatParticipantRepository;
+    private final MessageReadStatusRepository messageReadStatusRepository;
     private final WebSocketService webSocketService;
 
-        public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
+    public MessageResponse sendMessage(SendMessageRequest request, UUID senderId, String authToken) {
         // Проверяем существование чата
         var chat = chatRepository.findById(request.getChatId())
                 .orElseThrow(() -> new RuntimeException("Chat not found"));
@@ -73,7 +75,7 @@ public class MessageService {
         Pageable pageable = PageRequest.of(pageIndex, limit, Sort.by("sentAt").descending());
         Page<Message> messages = messageRepository.findByChatIdOrderBySentAtDesc(chatId, pageable);
 
-        // Помечаем сообщения как доставленные
+        // Помечаем сообщения как доставленные для данного пользователя
         markMessagesAsDelivered(chatId, userId);
 
         return messages.map(message -> convertToResponse(message, authToken));
@@ -94,8 +96,18 @@ public class MessageService {
         List<Message> unreadMessages = messageRepository
                 .findByChatIdAndReadAtIsNullAndSenderIdNot(chatId, userId);
 
+        LocalDateTime now = LocalDateTime.now();
+
         for (Message message : unreadMessages) {
-            message.setReadAt(LocalDateTime.now());
+            // агрегированное поле для всех (оставляем для обратной совместимости)
+            message.setReadAt(now);
+
+            // пер-пользовательский статус
+            var status = new ru.ogyrecheksan.chatmicroservice.model.MessageReadStatus();
+            status.setMessage(message);
+            status.setUserId(userId);
+            status.setReadAt(now);
+            messageReadStatusRepository.save(status);
         }
 
         messageRepository.saveAll(unreadMessages);
@@ -108,6 +120,11 @@ public class MessageService {
         LocalDateTime now = LocalDateTime.now();
         for (Message message : undeliveredMessages) {
             message.setDeliveredAt(now);
+            var status = new ru.ogyrecheksan.chatmicroservice.model.MessageReadStatus();
+            status.setMessage(message);
+            status.setUserId(userId);
+            status.setDeliveredAt(now);
+            messageReadStatusRepository.save(status);
         }
 
         messageRepository.saveAll(undeliveredMessages);
